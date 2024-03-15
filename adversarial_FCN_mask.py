@@ -104,7 +104,7 @@ class CompositeRealDataset(Dataset):
         return (comp_image, real_image, mask, comp_filename)
 
 
-# Assuming the paths to your datasets are 'path/to/composite_images' and 'path/to/real_images'
+#Paths to composite images, real images, and masks
 composite_d = './semi-harmonized_HFlickr'
 real_d = './HFlickr/real_images'
 mask_d = './HFlickr/masks'
@@ -173,7 +173,7 @@ class FCNGenerator(nn.Module):
         return self.tanh(self.final(u2))
 
 
-###Generator (Simple Version Used for Testing)###
+###Generator (Simple Version Used for Fast Training)###
 class FCNGeneratorSimple(nn.Module):
     def __init__(self, input_channels, output_channels):
         super(FCNGeneratorSimple, self).__init__()
@@ -227,6 +227,7 @@ Loss Function
 criterion = nn.BCELoss()
 criterion_l1 = nn.L1Loss()
 
+#Calculating Mask Loss, given harmonized image, corresponding real image, and mask
 def masked_loss(input, target, mask, criterion, alpha = 10):
     base_loss = criterion(input, target)
     mask_loss = criterion(input * mask, target * mask)
@@ -328,7 +329,7 @@ for epoch in range(num_epochs):
 print('Training finished.')
 
 
-###Save the trained weights
+###Save the trained weights to local
 
 model_save_path = './model_weights_masked_loss_50.pth'
 torch.save(G.state_dict(), model_save_path)
@@ -343,12 +344,12 @@ output_dir = './final_output_masked_loss_HFlickr'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-with torch.no_grad():  # We don't need to track gradients for this
+with torch.no_grad(): 
     for i, (composite_images, _, _, comp_names) in enumerate(dataloader):  # Assuming test_dataloader is defined
         composite_images = composite_images.to(device)
         harmonized_images = G(composite_images)
 
-        # Save images
+        # Save images to local
         for j, image in enumerate(harmonized_images):
             # Convert image tensor to a PIL image and save
             vutils.save_image(image, os.path.join(output_dir, comp_names[j]))
