@@ -259,7 +259,7 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 with torch.no_grad():
-    for i, (composite_images, _, filename) in enumerate(dataloader):  # Assuming test_dataloader is defined
+    for i, (composite_images, _, filename) in enumerate(dataloader):
         composite_images = composite_images.to(device)
         harmonized_images = G(composite_images)
 
