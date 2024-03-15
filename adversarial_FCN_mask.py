@@ -10,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
+ImageFile.LOAD_TRUNCATED_IMAGES = True  #prevent broken image loading
 from torchvision.transforms.functional import to_tensor
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -345,11 +345,10 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 with torch.no_grad(): 
-    for i, (composite_images, _, _, comp_names) in enumerate(dataloader):  # Assuming test_dataloader is defined
+    for i, (composite_images, _, _, comp_names) in enumerate(test_dataloader):
         composite_images = composite_images.to(device)
         harmonized_images = G(composite_images)
 
         # Save images to local
         for j, image in enumerate(harmonized_images):
-            # Convert image tensor to a PIL image and save
             vutils.save_image(image, os.path.join(output_dir, comp_names[j]))
