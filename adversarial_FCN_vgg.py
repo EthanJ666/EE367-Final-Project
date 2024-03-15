@@ -10,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
+ImageFile.LOAD_TRUNCATED_IMAGES = True  #To prevent broken image loading
 from torchvision.transforms.functional import to_tensor
 from torchvision import models
 
@@ -65,7 +65,7 @@ class CompositeRealDataset(Dataset):
 
         return (comp_image, real_image, comp_filename)
 
-# Assuming the paths to your datasets are 'path/to/composite_images' and 'path/to/real_images'
+
 composite_d = './semi-harmonized_HFlickr'
 real_d = './HFlickr/real_images'
 mask_d = './HFlickr/masks'
@@ -140,7 +140,7 @@ class FCNGenerator(nn.Module):
         return self.tanh(self.final(u2))
 
 
-###Generator (Simple Version Used for Testing)###
+###Generator (Simple Version Used for Fast Training)###
 class FCNGeneratorSimple(nn.Module):
     def __init__(self, input_channels, output_channels):
         super(FCNGeneratorSimple, self).__init__()
@@ -189,7 +189,7 @@ class Discriminator(nn.Module):
 
 
 """
-Loading VGG-19 Feature Extractor
+Loading VGG-19 Feature Extractor (From local .pth file in this project, can also use torch model)
 """
 # Load pre-trained VGG19 model
 vgg19 = models.vgg19(pretrained=False)
@@ -316,7 +316,7 @@ for epoch in range(num_epochs):
 
 print('Training finished.')
 
-###Save the trained weights
+###Save the trained weights to local
 model_save_path = './model_weights_vgg_40.pth'
 torch.save(G.state_dict(), model_save_path)
 
@@ -334,8 +334,8 @@ output_dir = './final_output_VGG_40_HFlickr'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-with torch.no_grad():  # We don't need to track gradients for this
-    for i, (composite_images, _, comp_names) in enumerate(dataloader):  # Assuming test_dataloader is defined
+with torch.no_grad():
+    for i, (composite_images, _, comp_names) in enumerate(test_dataloader):
         composite_images = composite_images.to(device)
         harmonized_images = G(composite_images)
 
