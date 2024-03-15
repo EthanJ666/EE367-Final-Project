@@ -64,7 +64,7 @@ class CompositeRealDataset(Dataset):
         return (comp_image, real_image, comp_filename)
 
 
-# Assuming the paths to your datasets are 'path/to/composite_images' and 'path/to/real_images'
+# Assuming the paths to your datasets are '/semi-harmonized_HFlickr/output' and './HFlickr/real_images'
 composite_d = './semi-harmonized_HFlickr/output'
 real_d = './HFlickr/real_images'
 
@@ -126,7 +126,7 @@ class FCNGenerator(nn.Module):
         return self.tanh(self.final(u2))
 
 
-###Generator (Simple Version Used for Testing)###
+###Generator (Simple Version Used for Fast Training)###
 class FCNGeneratorSimple(nn.Module):
     def __init__(self, input_channels, output_channels):
         super(FCNGeneratorSimple, self).__init__()
@@ -248,7 +248,7 @@ for epoch in range(num_epochs):
 print('Training finished.')
 
 
-###Save the trained weights
+###Save the trained weights to local
 model_save_path = './model_weights.pth'
 torch.save(G.state_dict(), model_save_path)
 
@@ -258,12 +258,11 @@ output_dir = './final_output_test_HFlickr'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-with torch.no_grad():  # We don't need to track gradients for this
+with torch.no_grad():
     for i, (composite_images, _, filename) in enumerate(dataloader):  # Assuming test_dataloader is defined
         composite_images = composite_images.to(device)
         harmonized_images = G(composite_images)
 
-        # Save images
+        # Save images to local
         for j, image in enumerate(harmonized_images):
-            # Convert image tensor to a PIL image and save
             vutils.save_image(image, os.path.join(output_dir, filename))
