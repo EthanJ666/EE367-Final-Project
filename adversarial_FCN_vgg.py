@@ -9,8 +9,10 @@ import os
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 from torchvision.transforms.functional import to_tensor
-from torchvision.models import vgg19
+from torchvision import models
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -30,7 +32,7 @@ def adjust_dimensions(input, target_shape):
 
 
 ###BUILS DATALOADER###
-"""
+
 class CompositeRealDataset(Dataset):
     def __init__(self, composite_dir, real_dir, filenames, transform=None):
 
@@ -62,52 +64,6 @@ class CompositeRealDataset(Dataset):
             real_image = to_tensor(real_image)
 
         return (comp_image, real_image, comp_filename)
-"""
-
-
-class CompositeRealDataset(Dataset):
-    def __init__(self, composite_dir, real_dir, mask_dir, filenames, transform=None):
-        """
-        Args:
-            composite_dir (string): Directory with all the composite images.
-            real_dir (string): Directory with all the corresponding real images.
-            transform (callable, optional): Optional transform to be applied on a sample.
-        """
-        self.composite_dir = composite_dir
-        self.real_dir = real_dir
-        self.mask_dir = mask_dir
-        self.transform = transform
-        self.filenames = filenames
-
-        # self.filenames = [file for file in os.listdir(composite_dir) if file.endswith('.png')]
-
-    def __len__(self):
-        return len(self.filenames)
-
-    def __getitem__(self, idx):
-        comp_filename = self.filenames[idx]
-        real_filename = comp_filename.rsplit('__', 1)[0] + '.jpg'
-        mask_filename = comp_filename.rsplit('__', 1)[0] + '_1' + '.png'
-
-        comp_path = os.path.join(self.composite_dir, comp_filename)
-        real_path = os.path.join(self.real_dir, real_filename)
-        mask_path = os.path.join(self.mask_dir, mask_filename)
-
-        comp_image = Image.open(comp_path).convert('RGB')
-        real_image = Image.open(real_path).convert('RGB')
-        mask = Image.open(mask_path).convert('L')
-
-        if self.transform is not None:
-            comp_image = self.transform(comp_image)
-            real_image = self.transform(real_image)
-            mask = self.transform(mask)
-        else:
-            comp_image = to_tensor(comp_image)
-            real_image = to_tensor(real_image)
-            mask = to_tensor(mask)
-
-        return (comp_image, real_image, mask, comp_filename)
-
 
 # Assuming the paths to your datasets are 'path/to/composite_images' and 'path/to/real_images'
 composite_d = './semi-harmonized_HFlickr'
@@ -119,9 +75,9 @@ train_files = all_filenames[:8000]
 test_files = all_filenames[8000:]
 
 # Create the Dataset
-dataset = CompositeRealDataset(composite_dir=composite_d, real_dir=real_d, mask_dir=mask_d, filenames=train_files,
+dataset = CompositeRealDataset(composite_dir=composite_d, real_dir=real_d, filenames=train_files,
                                transform=None)
-test_dataset = CompositeRealDataset(composite_dir=composite_d, real_dir=real_d, mask_dir=mask_d, filenames=test_files,
+test_dataset = CompositeRealDataset(composite_dir=composite_d, real_dir=real_d, filenames=test_files,
                                     transform=None)
 # Create the DataLoader
 dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
@@ -236,18 +192,17 @@ class Discriminator(nn.Module):
 Loading VGG-19 Feature Extractor
 """
 # Load pre-trained VGG19 model
-model_vgg = vgg19(pretrained=True).features
-
+vgg19 = models.vgg19(pretrained=False)
+vgg19.load_state_dict(torch.load('./vgg19-dcbb9e9d.pth'))
 # Set model to evaluation mode and to the device
-model_vgg = model_vgg.eval().to('cuda' if torch.cuda.is_available() else 'cpu')
+vgg19.eval()
+vgg19 = vgg19.to(device)
 
 # Disable gradient computation
-for param in model_vgg.parameters():
+for param in vgg19.parameters():
     param.requires_grad = False
 
 preprocess = transforms.Compose([
-    # Convert image to PyTorch tensor
-    transforms.ToTensor(),
     # Normalize using ImageNet mean and std
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
@@ -278,22 +233,31 @@ D = Discriminator(input_channels=3).to(device)
 optimizer_G = optim.Adam(G.parameters(), lr=0.0002, betas=(0.5, 0.999))
 optimizer_D = optim.Adam(D.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
-"""
-model_save_path = './model_weights_50.pth'
+
+model_save_path = './model_weights_VGG_20.pth'
 G.load_state_dict(torch.load(model_save_path))
 G.to(device)
-"""
+
+D_save_path = './D_weights_VGG_20.pth'
+D.load_state_dict(torch.load(D_save_path))
+D.to(device)
 
 """
 Training Loop
 """
 
 perc_weight = 10
-num_epochs = 30
+num_epochs = 20
 
 for epoch in range(num_epochs):
-    if epoch == 30:
-        model_save_path = './model_weights_simple_20.pth'
+    if epoch == 5:
+        model_save_path = './model_weights_VGG_25.pth'
+        torch.save(G.state_dict(), model_save_path)
+    if epoch == 10:
+        model_save_path = './model_weights_VGG_30.pth'
+        torch.save(G.state_dict(), model_save_path)
+    if epoch == 15:
+        model_save_path = './model_weights_VGG_35.pth'
         torch.save(G.state_dict(), model_save_path)
     for i, (composite_images, real_images, _) in enumerate(dataloader):
 
@@ -339,22 +303,24 @@ for epoch in range(num_epochs):
 
         perc_loss = perceptual_loss(comp_pre, real_pre, vgg19)
 
-        G_loss = G_fake_loss + perc_weight * perc_loss
+        G_l1_loss = criterion_l1(harmonized_images, real_images) * lambda_l1
+
+        G_loss = G_fake_loss + perc_weight * perc_loss + G_l1_loss
         G_loss.backward()
         optimizer_G.step()
 
         # Print some loss stats
         if i % 100 == 0:  # Print every 100 mini-batches
             print(
-                f'[{epoch}/{num_epochs}][{i}/{len(dataloader)}] Loss_D: {D_loss.item()}, Loss_G: {G_loss.item()}, L1_Loss: {G_l1_loss.item()}')
+                f'[{epoch}/{num_epochs}][{i}/{len(dataloader)}] Loss_D: {D_loss.item()}, Loss_G: {G_loss.item()}')
 
 print('Training finished.')
 
 ###Save the trained weights
-model_save_path = './model_weights_vgg_30.pth'
+model_save_path = './model_weights_vgg_40.pth'
 torch.save(G.state_dict(), model_save_path)
 
-D_save_path = './D_weights_vgg_30.pth'
+D_save_path = './D_weights_vgg_40.pth'
 torch.save(D.state_dict(), D_save_path)
 
 """
@@ -364,7 +330,7 @@ G.to(device)
 """
 
 ###Save the output images to be compared
-output_dir = './final_output_VGG_HFlickr'
+output_dir = './final_output_VGG_40_HFlickr'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
